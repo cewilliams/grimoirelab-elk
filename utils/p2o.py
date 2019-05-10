@@ -86,7 +86,7 @@ if __name__ == '__main__':
                                args.author_id, args.author_uuid,
                                args.filter_raw, args.filters_raw_prefix,
                                args.jenkins_rename_file, unaffiliated_group,
-                               args.pair_programming, studies_args)
+                               args.pair_programming, None, studies_args)
                 logging.info("Enrich backend completed")
             elif args.events_enrich:
                 logging.info("Enrich option is needed for events_enrich")

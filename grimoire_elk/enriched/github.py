@@ -268,10 +268,17 @@ class GitHubEnrich(Enrich):
         """Get the first date at which a comment or reaction was made to the issue by someone
         other than the user who created the issue
         """
-        comment_dates = [str_to_datetime(comment['created_at']) for comment in item['comments_data']
-                         if item['user']['login'] != comment['user']['login']]
-        reaction_dates = [str_to_datetime(reaction['created_at']) for reaction in item['reactions_data']
-                          if item['user']['login'] != reaction['user']['login']]
+
+        comment_dates = []
+        if 'comments_data' in item:
+            comment_dates = [str_to_datetime(comment['created_at']) for comment in item['comments_data']
+                             if item['user']['login'] != comment['user']['login']]
+        reaction_dates = []
+        if 'reactions_data' in item:
+            for reaction in item['reactions_data']:
+                if item['user']['login'] != reaction['user']['login']:
+                    reaction_dates.append(str_to_datetime(reaction['created_at']))
+
         reaction_dates.extend(comment_dates)
         if reaction_dates:
             return min(reaction_dates)
@@ -290,7 +297,9 @@ class GitHubEnrich(Enrich):
     def get_latest_comment_date(self, item):
         """Get the date of the latest comment on the issue/pr"""
 
-        comment_dates = [str_to_datetime(comment['created_at']) for comment in item['comments_data']]
+        comment_dates = []
+        if 'comments_data' in item:
+            comment_dates = [str_to_datetime(comment['created_at']) for comment in item['comments_data']]
         if comment_dates:
             return max(comment_dates)
         return None
@@ -298,7 +307,9 @@ class GitHubEnrich(Enrich):
     def get_num_commenters(self, item):
         """Get the number of unique people who commented on the issue/pr"""
 
-        commenters = [comment['user']['login'] for comment in item['comments_data']]
+        commenters = []
+        if 'comments_data' in item:
+            commenters = [comment['user']['login'] for comment in item['comments_data']]
         return len(set(commenters))
 
     @metadata
@@ -454,7 +465,11 @@ class GitHubEnrich(Enrich):
             error_msg = "Error extracting id_in_repo from {}. Aborting.".format(self.elastic.index_url)
             r = make_request(enrich_index_search_url, error_msg, fetch_id_in_repo_query, "POST")
             id_in_repo_json = r.json()["hits"]["hits"]
-            pull_requests_ids.extend([item["_source"]["id_in_repo"] for item in id_in_repo_json])
+
+            for item in id_in_repo_json:
+                if "_source" in item:
+                    if "id_in_repo" in item["_source"]:
+                        pull_requests_ids.extend([item["_source"]["id_in_repo"]])
             i += size
             num_pull_requests -= size
 
@@ -481,8 +496,13 @@ class GitHubEnrich(Enrich):
             issue_query = query % ('"data.number"', pr_id)
             error_msg = "Id {} doesnot exists in {}. Aborting.".format(pr_id, github_issues_raw_index)
             r = make_request(issues_index_search_url, error_msg, issue_query, "POST")
-            issue = r.json()["hits"]["hits"][0]["_source"]["data"]
-
+            issue = None
+            try:
+                issue = r.json()["hits"]["hits"][0]["_source"]["data"]
+            except:
+                print("Unable to load data for issue", pr_id, "... skipping")
+                continue
+            
             # retrieve the data from the pull_requests index
             pr_query = query % ('"id_in_repo"', pr_id)
             error_msg = "Id {} doesnot exists in {}. Aborting.".format(pr_id, self.elastic.index_url)
@@ -496,8 +516,10 @@ class GitHubEnrich(Enrich):
                                                self.get_time_to_first_attention(issue))
             if not reaction_time:
                 reaction_time = 0
-            if pull_request["time_to_merge_request_response"]:
-                reaction_time = min(pull_request["time_to_merge_request_response"], reaction_time)
+
+            if "time_to_merge_request_response" in pull_request:
+                if pull_request["time_to_merge_request_response"]:
+                    reaction_time = min(pull_request["time_to_merge_request_response"], reaction_time)
             pull_request["time_to_merge_request_response"] = reaction_time
 
             pull_request['num_comments'] = issue['comments']
@@ -589,7 +611,10 @@ class GitHubEnrich(Enrich):
         rich_pr['closed_at'] = pull_request['closed_at']
         rich_pr['url'] = pull_request['html_url']
         labels = []
-        [labels.append(label['name']) for label in pull_request['labels'] if 'labels' in pull_request]
+        if 'labels' in pull_request:
+            for label in pull_request['labels']:
+                labels.append(label['name'])
+                
         rich_pr['labels'] = labels
 
         rich_pr['pull_request'] = True
