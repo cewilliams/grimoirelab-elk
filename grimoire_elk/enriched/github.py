@@ -448,6 +448,8 @@ class GitHubEnrich(Enrich):
         r = make_request(count_url, error_msg)
         num_pull_requests = int(r.text.split()[-1])
 
+        print("EPR:", num_pull_requests,"PRs")
+        
         # get all the ids that are in the enriched pull requests index which will be used later
         # to pull requests data from the issue having the same id in the raw_issues_index
         pull_requests_ids = []
@@ -464,8 +466,16 @@ class GitHubEnrich(Enrich):
 
             error_msg = "Error extracting id_in_repo from {}. Aborting.".format(self.elastic.index_url)
             r = make_request(enrich_index_search_url, error_msg, fetch_id_in_repo_query, "POST")
-            id_in_repo_json = r.json()["hits"]["hits"]
-
+            id_in_repo_json = None
+            try:
+                id_in_repo_json = r.json()["hits"]["hits"]
+            except:
+                print("Query:", fetch_id_in_repo_query)
+                print("?? R", r)
+                print("?? R", dir(r))
+                print("?? R", r.to_dict())
+                print("No data found?", r.json())
+                
             for item in id_in_repo_json:
                 if "_source" in item:
                     if "id_in_repo" in item["_source"]:
